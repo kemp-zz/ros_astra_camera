@@ -1,133 +1,70 @@
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.5)
 project(astra_camera)
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O3")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}  -fPIC -g")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O3")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fPIC -g")
-set(CMAKE_BUILD_TYPE "Release")
-option(USE_RK_MPP "Use rock chip MPP libary for hardware decode" OFF)
-option(USE_RK_RGA "Use rock chip RGA libary for hardware decode" OFF)
-if (CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
-endif ()
+endif()
 
-find_package(catkin REQUIRED
-  backward_ros
-  cv_bridge
-  dynamic_reconfigure
-  image_geometry
-  image_transport
-  message_generation
-  roscpp
-  sensor_msgs
-  std_srvs
-  tf2
-  tf2_ros
-  message_filters
-  camera_info_manager
-)
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_geometry REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(message_filters REQUIRED)
+find_package(camera_info_manager REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED)
-find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
-pkg_search_module(LIBUVC REQUIRED libuvc)
-if (NOT LIBUVC_FOUND)
-  message(FATAL_ERROR "libuvc is not found")
-endif ()
 
-if (USE_RK_MPP)
-  message(STATUS "Use rock chip MPP libary for hardware decode")
-  add_definitions(-DUSE_RK_MPP)
-  pkg_search_module(RK_MPP REQUIRED rockchip_mpp)
-  if (NOT RK_MPP_FOUND)
-    message(FATAL_ERROR "rockchip_mpp is not found")
-  endif ()
-endif ()
-if (USE_RK_RGA)
-  message(STATUS "Use rock chip RGA libary for hardware decode")
-  add_definitions(-DUSE_RK_RGA)
-  pkg_search_module(RK_RGA REQUIRED librga)
-  if (NOT RK_RGA_FOUND)
-    message(FATAL_ERROR "rockchip_rga is not found")
-  endif ()
-endif ()
+# ROS IDL interface generation
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/DeviceInfo.msg"
+  "msg/Extrinsics.msg"
+  "msg/Metadata.msg"
+  "srv/GetBool.srv"
+  "srv/GetCameraInfo.srv"
+  "srv/GetCameraParams.srv"
+  "srv/GetDeviceInfo.srv"
+  "srv/GetDouble.srv"
+  "srv/GetInt32.srv"
+  "srv/GetString.srv"
+  "srv/SetInt32.srv"
+  "srv/SetString.srv"
+  DEPENDENCIES
+  sensor_msgs
+  std_msgs
+)
+
+# Platform detection
 execute_process(COMMAND uname -m OUTPUT_VARIABLE MACHINES)
 execute_process(COMMAND getconf LONG_BIT OUTPUT_VARIABLE MACHINES_BIT)
-message(STATUS "ORRBEC Machine : ${MACHINES}")
-message(STATUS "ORRBEC Machine Bits : ${MACHINES_BIT}")
-if ((${MACHINES} MATCHES "x86_64") AND (${MACHINES_BIT} MATCHES "64"))
+string(STRIP ${MACHINES} MACHINES)
+string(STRIP ${MACHINES_BIT} MACHINES_BIT)
+
+if(MACHINES STREQUAL "x86_64" AND MACHINES_BIT STREQUAL "64")
   set(HOST_PLATFORM "x64")
-elseif (${MACHINES} MATCHES "arm")
-  set(HOST_PLATFORM "arm")
-elseif ((${MACHINES} MATCHES "aarch64") AND (${MACHINES_BIT} MATCHES "64"))
-  set(HOST_PLATFORM "arm64")
-elseif ((${MACHINES} MATCHES "aarch64") AND (${MACHINES_BIT} MATCHES "32"))
-  set(HOST_PLATFORM "arm")
-endif ()
+elseif(MACHINES MATCHES "arm" OR MACHINES MATCHES "aarch64")
+  if(MACHINES_BIT STREQUAL "64")
+    set(HOST_PLATFORM "arm64")
+  else()
+    set(HOST_PLATFORM "arm")
+  endif()
+endif()
 
-message(STATUS "ORRBEC : ${HOST_PLATFORM}")
-message(STATUS "libuvc ${libuvc_VERSION_MAJOR}.${libuvc_VERSION_MINOR}.${libuvc_VERSION_PATCH}")
+set(ORBBEC_OPENNI2_REDIST "${CMAKE_CURRENT_SOURCE_DIR}/include/openni2_redist/${HOST_PLATFORM}")
 
-generate_dynamic_reconfigure_options(cfg/Astra.cfg)
-
-add_message_files(
-  FILES
-  DeviceInfo.msg
-  Extrinsics.msg
-  Metadata.msg
-)
-
-add_service_files(
-  FILES
-  GetBool.srv
-  GetCameraInfo.srv
-  GetCameraParams.srv
-  GetDeviceInfo.srv
-  GetDouble.srv
-  GetInt32.srv
-  GetString.srv
-  SetInt32.srv
-  SetString.srv
-)
-
-generate_messages(
-  DEPENDENCIES
-  std_msgs sensor_msgs
-)
-
-catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS
-  cv_bridge
-  dynamic_reconfigure
-  image_geometry
-  image_transport
-  message_runtime
-  roscpp
-  sensor_msgs
-  tf2
-  tf2_ros
-  std_srvs
-  message_filters
-  camera_info_manager
-  backward_ros
-)
-
-add_definitions(-Dlibuvc_VERSION_MAJOR=${libuvc_VERSION_MAJOR})
-add_definitions(-Dlibuvc_VERSION_MINOR=${libuvc_VERSION_MINOR})
-add_definitions(-Dlibuvc_VERSION_PATCH=${libuvc_VERSION_PATCH})
-
-set(ORBBEC_OPENNI2_REDIST
-  "${CMAKE_CURRENT_SOURCE_DIR}/include/openni2_redist/${HOST_PLATFORM}")
-
-set(CMAKE_BUILD_RPATH "${CMAKE_BUILD_RPATH}:${ORBBEC_OPENNI2_REDIST}")
-set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}:${ORBBEC_OPENNI2_REDIST}")
-
-add_library(${PROJECT_NAME}
+# Library configuration
+add_library(${PROJECT_NAME} SHARED
   src/point_cloud_proc/point_cloud_xyz.cpp
   src/point_cloud_proc/point_cloud_xyzrgb.cpp
   src/d2c_viewer.cpp
@@ -144,118 +81,85 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
-  ${catkin_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
-  ${libuvc_INCLUDE_DIRS}
-  ${OpenCV_INCLUDED_DIRS}
-  ${RK_MPP_INCLUDE_DIRS}
-  ${RK_RGA_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
+
 target_link_libraries(${PROJECT_NAME}
   -lOpenNI2
-  -ldw # for stacktrace
+  -ldw
   -L${ORBBEC_OPENNI2_REDIST}
-  ${catkin_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
   ${OpenCV_LIBS}
-  ${LIBUVC_LIBRARIES}
-  ${RK_MPP_LIBRARIES}
-  ${RK_RGA_LIBRARIES}
+  ${Boost_LIBRARIES}
 )
 
-add_dependencies(${PROJECT_NAME}
-  ${PROJECT_NAME}_gencfg
-  ${PROJECT_NAME}_generate_messages_cpp)
-
-add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
-
-add_executable(${PROJECT_NAME}_node
-  src/main.cpp
+ament_target_dependencies(${PROJECT_NAME}
+  rclcpp
+  sensor_msgs
+  std_msgs
+  std_srvs
+  cv_bridge
+  image_geometry
+  image_transport
+  tf2
+  tf2_ros
+  message_filters
+  camera_info_manager
 )
 
-target_include_directories(${PROJECT_NAME}_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-  ${catkin_INCLUDE_DIRS}
-  ${Boost_INCLUDE_DIRS}
-  ${LIBUVC_INCLUDE_DIRS}
-  ${OpenCV_INCLUDED_DIRS}
-)
+# Executables
+add_executable(astra_camera_node src/main.cpp)
+target_link_libraries(astra_camera_node ${PROJECT_NAME})
+ament_target_dependencies(astra_camera_node rclcpp)
 
-target_link_libraries(${PROJECT_NAME}_node
-  -lOpenNI2
-  -L${ORBBEC_OPENNI2_REDIST}
+add_executable(list_devices_node src/list_devices_node.cpp)
+target_link_libraries(list_devices_node ${PROJECT_NAME})
+ament_target_dependencies(list_devices_node rclcpp)
+
+# Install rules
+install(TARGETS
   ${PROJECT_NAME}
-  ${catkin_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
-  ${OpenCV_LIBS}
-  ${LIBUVC_LIBRARIES}
-)
-
-add_executable(list_devices_node
-  src/list_devices_node.cpp
-)
-target_include_directories(list_devices_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-  ${catkin_INCLUDE_DIRS}
-  ${Boost_INCLUDE_DIRS}
-  ${LIBUVC_INCLUDE_DIRS}
-  ${OpenCV_INCLUDED_DIRS}
-)
-
-target_link_libraries(list_devices_node
-  -lOpenNI2
-  -L${ORBBEC_OPENNI2_REDIST}
-  ${PROJECT_NAME}
-  ${catkin_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
-  ${OpenCV_LIBS}
-  ${LIBUVC_LIBRARIES}
-)
-
-
-install(TARGETS ${PROJECT_NAME}
-  ${PROJECT_NAME}_node
+  astra_camera_node
   list_devices_node
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-install(FILES ${ORBBEC_OPENNI2_REDIST}/libOpenNI2.so
-  DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}/
-)
-
-install(DIRECTORY ${ORBBEC_OPENNI2_REDIST}/OpenNI2
-  DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}/
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 install(DIRECTORY include/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING
-  PATTERN "*"
+  DESTINATION include
   PATTERN "openni2_redist" EXCLUDE
 )
 
+install(FILES ${ORBBEC_OPENNI2_REDIST}/libOpenNI2.so
+  DESTINATION lib
+)
+
+install(DIRECTORY ${ORBBEC_OPENNI2_REDIST}/OpenNI2
+  DESTINATION lib
+)
+
 install(FILES 56-orbbec-usb.rules
-  DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}/${PROJECT_NAME}
-)
-
-install(DIRECTORY scripts
-  DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}/${PROJECT_NAME}
-)
-
-install(FILES 56-orbbec-usb.rules
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
-
-install(DIRECTORY scripts
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+  DESTINATION share/${PROJECT_NAME}
 )
 
 install(DIRECTORY launch
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+  DESTINATION share/${PROJECT_NAME}
 )
+
+install(DIRECTORY scripts
+  DESTINATION share/${PROJECT_NAME}
+)
+
+ament_export_include_directories(include)
+ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(
+  rosidl_default_runtime
+  rclcpp
+  sensor_msgs
+  std_msgs
+  cv_bridge
+  image_transport
+)
+
+ament_package()
