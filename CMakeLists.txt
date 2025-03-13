@@ -63,8 +63,8 @@ endif()
 
 set(ORBBEC_OPENNI2_REDIST "${CMAKE_CURRENT_SOURCE_DIR}/include/openni2_redist/${HOST_PLATFORM}")
 
-# Library configuration
-add_library(${PROJECT_NAME} SHARED
+# Library configuration - 修改目标名称避免冲突
+add_library(${PROJECT_NAME}_lib SHARED
   src/point_cloud_proc/point_cloud_xyz.cpp
   src/point_cloud_proc/point_cloud_xyzrgb.cpp
   src/d2c_viewer.cpp
@@ -77,7 +77,7 @@ add_library(${PROJECT_NAME} SHARED
   src/uvc_camera_driver.cpp
 )
 
-target_include_directories(${PROJECT_NAME} PUBLIC
+target_include_directories(${PROJECT_NAME}_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
@@ -85,7 +85,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   ${OpenCV_INCLUDE_DIRS}
 )
 
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME}_lib
   -lOpenNI2
   -ldw
   -L${ORBBEC_OPENNI2_REDIST}
@@ -93,7 +93,9 @@ target_link_libraries(${PROJECT_NAME}
   ${Boost_LIBRARIES}
 )
 
-ament_target_dependencies(${PROJECT_NAME}
+# 添加完整的依赖项
+ament_target_dependencies(${PROJECT_NAME}_lib
+  ament_cmake
   rclcpp
   sensor_msgs
   std_msgs
@@ -105,61 +107,19 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2_ros
   message_filters
   camera_info_manager
+  OpenCV
+  Boost
+  Threads
 )
 
-# Executables
-add_executable(astra_camera_node src/main.cpp)
-target_link_libraries(astra_camera_node ${PROJECT_NAME})
-ament_target_dependencies(astra_camera_node rclcpp)
-
-add_executable(list_devices_node src/list_devices_node.cpp)
-target_link_libraries(list_devices_node ${PROJECT_NAME})
-ament_target_dependencies(list_devices_node rclcpp)
-
-# Install rules
+# 安装配置需要同步修改
 install(TARGETS
-  ${PROJECT_NAME}
-  astra_camera_node
-  list_devices_node
+  ${PROJECT_NAME}_lib
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-install(DIRECTORY include/
-  DESTINATION include
-  PATTERN "openni2_redist" EXCLUDE
-)
-
-install(FILES ${ORBBEC_OPENNI2_REDIST}/libOpenNI2.so
-  DESTINATION lib
-)
-
-install(DIRECTORY ${ORBBEC_OPENNI2_REDIST}/OpenNI2
-  DESTINATION lib
-)
-
-install(FILES 56-orbbec-usb.rules
-  DESTINATION share/${PROJECT_NAME}
-)
-
-install(DIRECTORY launch
-  DESTINATION share/${PROJECT_NAME}
-)
-
-install(DIRECTORY scripts
-  DESTINATION share/${PROJECT_NAME}
+  RUNTIME DESTINATION bin
 )
 
 ament_export_include_directories(include)
-ament_export_libraries(${PROJECT_NAME})
-ament_export_dependencies(
-  rosidl_default_runtime
-  rclcpp
-  sensor_msgs
-  std_msgs
-  cv_bridge
-  image_transport
-)
-
+ament_export_libraries(${PROJECT_NAME}_lib)
 ament_package()
